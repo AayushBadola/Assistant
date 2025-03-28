@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Assistant</title>
+  <style>
+    body {
+      background: #1e1e1e;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    button {
+      padding: 12px 25px;
+      background: #00bfa5;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>My Voice Assistant</h1>
+  <button onclick="startAssistant()">🎙️ Start Listening</button>
+  <div id="status">Press the button and speak.</div>
+
+  <script>
+    const statusDiv = document.getElementById('status');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+
+    function speak(message) {
+      const speech = new SpeechSynthesisUtterance(message);
+      speech.lang = 'en-US';
+      window.speechSynthesis.speak(speech);
+    }
+
+    function handleCommand(command) {
+      const text = command.toLowerCase();
+      console.log('Command:', text);
+
+      if (text.includes('hello')) {
+        speak('Hi there! How can I assist you today?');
+      } else if (text.includes('how are you')) {
+        speak('I am just a virtual assistant, but I am functioning well!');
+      } else if (text.includes('your name')) {
+        speak('I am your voice assistant.');
+      } else if (text.includes('time')) {
+        const time = new Date().toLocaleTimeString();
+        speak(`The time is ${time}`);
+      } else if (text.includes('date')) {
+        const date = new Date().toLocaleDateString();
+        speak(`Today's date is ${date}`);
+      } else if (text.includes('open google')) {
+        speak('Opening Google.');
+        window.open('https://www.google.com', '_blank');
+      } else if (text.includes('open youtube')) {
+        speak('Opening YouTube.');
+        window.open('https://www.youtube.com', '_blank');
+      } else if (text.includes('joke')) {
+        speak('Why don’t skeletons fight each other? Because they don’t have the guts!');
+      } else if (text.includes('search for')) {
+        const query = text.split('search for')[1];
+        if (query) {
+          speak(`Searching for ${query}`);
+          window.open(`https://www.google.com/search?q=${query.trim()}`, '_blank');
+        } else {
+          speak('Please tell me what to search.');
+        }
+      } else {
+        speak("Sorry, I didn't understand. Please try again.");
+      }
+    }
+
+    function startAssistant() {
+      recognition.start();
+      statusDiv.textContent = 'Listening...';
+    }
+
+    recognition.onresult = (event) => {
+      const speechResult = event.results[0][0].transcript;
+      statusDiv.textContent = `You said: "${speechResult}"`;
+      handleCommand(speechResult);
+    };
+
+    recognition.onend = () => {
+      statusDiv.textContent = 'Click "Start Listening" to speak again.';
+    };
+
+    recognition.onerror = (event) => {
+      statusDiv.textContent = 'Error occurred: ' + event.error;
+      speak('Sorry, an error occurred.');
+    };
+  </script>
+
+</body>
+</html>
