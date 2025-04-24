@@ -1,108 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Voice Assistant</title>
-  <style>
-    body {
-      background: #1e1e1e;
-      color: #fff;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding-top: 50px;
-    }
-    button {
-      padding: 12px 25px;
-      background: #00bfa5;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    #status {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Efficient Voice Assistant</title>
+    <style>
+        body {
+            background: #1a1a1a; /* Slightly darker background */
+            color: #e0e0e0; /* Slightly softer white */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Modern font stack */
+            text-align: center;
+            padding-top: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center content horizontally */
+            min-height: 100vh; /* Ensure body takes full viewport height */
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #00bfa5; /* Match button color */
+        }
+        button#startButton { /* Target by ID */
+            padding: 15px 30px; /* Slightly larger padding */
+            background: #00bfa5;
+            color: #fff;
+            border: none;
+            border-radius: 25px; /* More rounded */
+            cursor: pointer;
+            font-size: 18px; /* Slightly larger font */
+            transition: background-color 0.2s ease; /* Smooth hover transition */
+            margin-bottom: 30px; /* Add margin below button */
+        }
+        button#startButton:hover {
+            background: #008c7a; /* Darker shade on hover */
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+            min-height: 2em; /* Reserve space to prevent layout shifts */
+            color: #bdbdbd; /* Lighter grey for status */
+        }
+        /* Style for recognized text */
+        #status strong {
+            color: #ffffff; /* Make recognized text white */
+            font-weight: normal; /* Optional: normal weight */
+        }
+    </style>
 </head>
 <body>
 
-  <h1>My Voice Assistant</h1>
-  <button onclick="startAssistant()">🎙️ Start Listening</button>
-  <div id="status">Press the button and speak.</div>
+    <h1>My Efficient Voice Assistant</h1>
+    <button id="startButton">🎙️ Start Listening</button>
+    <div id="status">Press the button and speak.</div>
 
-  <script>
-    const statusDiv = document.getElementById('status');
+    <script>
+        const statusDiv = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
+        // --- Configuration ---
+        const ASSISTANT_NAME = "Voice Assistant"; // Give your assistant a name if desired
+        const DEFAULT_LANG = 'en-US';
 
-    function speak(message) {
-      const speech = new SpeechSynthesisUtterance(message);
-      speech.lang = 'en-US';
-      window.speechSynthesis.speak(speech);
-    }
+        // Check for browser support
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        const synth = window.speechSynthesis;
 
-    function handleCommand(command) {
-      const text = command.toLowerCase();
-      console.log('Command:', text);
-
-      if (text.includes('hello')) {
-        speak('Hi there! How can I assist you today?');
-      } else if (text.includes('how are you')) {
-        speak('I am just a virtual assistant, but I am functioning well!');
-      } else if (text.includes('your name')) {
-        speak('I am your voice assistant.');
-      } else if (text.includes('time')) {
-        const time = new Date().toLocaleTimeString();
-        speak(`The time is ${time}`);
-      } else if (text.includes('date')) {
-        const date = new Date().toLocaleDateString();
-        speak(`Today's date is ${date}`);
-      } else if (text.includes('open google')) {
-        speak('Opening Google.');
-        window.open('https://www.google.com', '_blank');
-      } else if (text.includes('open youtube')) {
-        speak('Opening YouTube.');
-        window.open('https://www.youtube.com', '_blank');
-      } else if (text.includes('joke')) {
-        speak('Why don’t skeletons fight each other? Because they don’t have the guts!');
-      } else if (text.includes('search for')) {
-        const query = text.split('search for')[1];
-        if (query) {
-          speak(`Searching for ${query}`);
-          window.open(`https://www.google.com/search?q=${query.trim()}`, '_blank');
-        } else {
-          speak('Please tell me what to search.');
+        // --- Utility Functions ---
+        function speak(message, lang = DEFAULT_LANG) {
+            if (synth.speaking) {
+                console.error('SpeechSynthesis.speaking');
+                // Optional: Cancel previous utterance before speaking new one
+                // synth.cancel();
+                return;
+            }
+            if (!message) {
+                console.error('No message provided to speak');
+                return;
+            }
+            try {
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.lang = lang;
+                utterance.onerror = (event) => console.error('SpeechSynthesisUtterance.onerror', event);
+                synth.speak(utterance);
+            } catch (error) {
+                console.error("Error in speech synthesis:", error);
+            }
         }
-      } else {
-        speak("Sorry, I didn't understand. Please try again.");
-      }
-    }
 
-    function startAssistant() {
-      recognition.start();
-      statusDiv.textContent = 'Listening...';
-    }
+        function updateStatus(message, isError = false) {
+            statusDiv.textContent = message;
+            statusDiv.style.color = isError ? '#ff6b6b' : '#bdbdbd'; // Use red for errors
+            // Reset strong color in case previous status used it
+            statusDiv.querySelectorAll('strong').forEach(el => el.style.color = '#ffffff');
+        }
 
-    recognition.onresult = (event) => {
-      const speechResult = event.results[0][0].transcript;
-      statusDiv.textContent = `You said: "${speechResult}"`;
-      handleCommand(speechResult);
-    };
+        // --- Command Definitions ---
+        const commands = [
+            {
+                triggers: ['hello', 'hi', 'hey'],
+                action: () => speak('Hi there! How can I assist you today?')
+            },
+            {
+                triggers: ['how are you'],
+                action: () => speak('I am just a virtual assistant, operating as expected!')
+            },
+            {
+                triggers: ['your name', 'who are you'],
+                action: () => speak(`I am your ${ASSISTANT_NAME}.`)
+            },
+            {
+                triggers: ['time'],
+                action: () => {
+                    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); // Format time nicely
+                    speak(`The current time is ${time}`);
+                }
+            },
+            {
+                triggers: ['date'],
+                action: () => {
+                    const date = new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); // Format date nicely
+                    speak(`Today's date is ${date}`);
+                }
+            },
+            {
+                triggers: ['open google'],
+                action: () => {
+                    speak('Opening Google.');
+                    window.open('https://www.google.com', '_blank');
+                }
+            },
+            {
+                triggers: ['open youtube'],
+                action: () => {
+                    speak('Opening YouTube.');
+                    window.open('https://www.youtube.com', '_blank');
+                }
+            },
+            {
+                triggers: ['joke', 'tell me a joke'],
+                action: () => speak('Why don’t scientists trust atoms? Because they make up everything!')
+            },
+            {
+                // Use a function for more complex matching logic (like regex)
+                match: (text) => text.match(/search for (.+)/i), // Case-insensitive regex matching "search for" followed by anything
+                action: (matches) => {
+                    const query = matches[1].trim(); // Get the captured group (the query)
+                    if (query) {
+                        speak(`Searching Google for ${query}`);
+                        window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank'); // Encode query properly
+                    } else {
+                        speak('Please tell me what to search for.');
+                    }
+                }
+            }
+            // Add more commands here following the pattern
+        ];
 
-    recognition.onend = () => {
-      statusDiv.textContent = 'Click "Start Listening" to speak again.';
-    };
+        // --- Command Handling Logic ---
+        function handleCommand(commandText) {
+            const text = commandText.toLowerCase().trim();
+            console.log('Command Received:', text);
 
-    recognition.onerror = (event) => {
-      statusDiv.textContent = 'Error occurred: ' + event.error;
-      speak('Sorry, an error occurred.');
-    };
-  </script>
+            if (!text) {
+                updateStatus("Didn't quite catch that. Try again?", true);
+                return;
+            }
+
+             // Update status showing what was heard
+             statusDiv.innerHTML = `You said: "<strong>${commandText}</strong>"`; // Use innerHTML to allow strong tag
+             statusDiv.style.color = '#bdbdbd'; // Reset color
+
+            let commandExecuted = false;
+            for (const cmd of commands) {
+                let match = false;
+                let actionArgs = []; // Arguments to pass to the action function (e.g., regex matches)
+
+                if (cmd.triggers) {
+                    // Check if any trigger word/phrase is included in the command text
+                    match = cmd.triggers.some(trigger => text.includes(trigger));
+                } else if (cmd.match) {
+                    // Use custom matching function (e.g., regex)
+                    const regexResult = cmd.match(text);
+                    if (regexResult) {
+                        match = true;
+                        actionArgs = regexResult; // Pass regex matches to action
+                    }
+                }
+
+                if (match) {
+                    cmd.action(actionArgs); // Execute the command's action
+                    commandExecuted = true;
+                    break; // Stop checking once a command is matched
+                }
+            }
+
+            if (!commandExecuted) {
+                speak("Sorry, I didn't understand that command. Can you please repeat or try a different one?");
+                 // Keep the status showing what was heard, but maybe add clarification
+                 statusDiv.innerHTML += "<br/>(Command not recognized)";
+            }
+        }
+
+        // --- Speech Recognition Setup ---
+        if (recognition) {
+            recognition.lang = DEFAULT_LANG;
+            recognition.interimResults = false; // Only final results
+            recognition.continuous = false; // Stop listening after first utterance
+
+            recognition.onresult = (event) => {
+                const speechResult = event.results[event.results.length - 1][0].transcript; // Get the last result's transcript
+                handleCommand(speechResult);
+            };
+
+            recognition.onstart = () => {
+                updateStatus('Listening...');
+                startButton.textContent = "🚫 Stop Listening"; // Change button text/icon
+            };
+
+            recognition.onend = () => {
+                updateStatus('Click "Start Listening" to speak again.');
+                 startButton.textContent = "🎙️ Start Listening"; // Change back
+                 startButton.disabled = false; // Re-enable button if it was disabled
+            };
+
+            recognition.onerror = (event) => {
+                let errorMessage = 'An error occurred during speech recognition';
+                if (event.error === 'no-speech') {
+                    errorMessage = 'No speech detected. Please try again.';
+                } else if (event.error === 'audio-capture') {
+                    errorMessage = 'Audio capture failed. Check microphone permissions.';
+                } else if (event.error === 'not-allowed') {
+                    errorMessage = 'Permission to use microphone was denied.';
+                } else {
+                     errorMessage = `Error: ${event.error}`;
+                }
+                console.error('Speech Recognition Error:', event.error, event.message);
+                updateStatus(errorMessage, true);
+                speak('Sorry, there was an error with speech recognition.');
+                 startButton.textContent = "🎙️ Start Listening"; // Ensure button resets on error
+                 startButton.disabled = false;
+            };
+
+             // Button click handler
+            startButton.addEventListener('click', () => {
+                if (!recognition) return; // Do nothing if not supported
+
+                // Toggle listening state (optional, good for continuous=true)
+                // For continuous=false, starting again is standard
+                 try {
+                    recognition.start();
+                    startButton.disabled = true; // Disable button while listening
+                 } catch(e) {
+                    // Handle cases like starting recognition when it's already running
+                     console.error("Error starting recognition:", e);
+                    updateStatus("Could not start listening.", true);
+                 }
+            });
+
+        } else {
+            // Handle browsers that don't support SpeechRecognition
+            updateStatus("Sorry, your browser doesn't support the Web Speech API.", true);
+            speak("Sorry, voice recognition is not supported in this browser.");
+            startButton.disabled = true;
+            startButton.style.backgroundColor = "#grey"; // Indicate disabled state
+            startButton.style.cursor = "not-allowed";
+        }
+
+    </script>
 
 </body>
 </html>
