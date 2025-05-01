@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Voice Assistant</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a; --text-color: #e0e0e0; --accent-color: #00bfa5;
+            --accent-hover: #008c7a; --secondary-bg: #2a2a2a; --status-color: #bdbdbd;
+            --strong-color: #ffffff; --error-color: #ff6b6b; --border-color: #444;
+            --link-color: #64b5f6;
+        }
+        body.light-theme {
+            --bg-color: #f4f4f4; --text-color: #333; --accent-color: #00796b;
+            --accent-hover: #004d40; --secondary-bg: #e0e0e0; --status-color: #555;
+            --strong-color: #000000; --error-color: #d32f2f; --border-color: #ccc;
+            --link-color: #1976d2;
+        }
+        body {
+            background: var(--bg-color); color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;
+            padding: 30px; display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; box-sizing: border-box; transition: background-color 0.3s, color 0.3s;
+        }
+        h1 { color: var(--accent-color); margin-bottom: 20px; }
+        button#startButton {
+            padding: 15px 35px; background: var(--accent-color); color: #fff; border: none;
+            border-radius: 25px; cursor: pointer; font-size: 18px;
+            transition: background-color 0.2s ease; margin-bottom: 25px; min-width: 200px;
+        }
+        button#startButton:hover:not(:disabled) { background: var(--accent-hover); }
+        button#startButton:disabled { background-color: #555; cursor: not-allowed; }
+        #status {
+            margin-top: 15px; font-size: 17px; min-height: 3em; color: var(--status-color);
+            max-width: 80%; line-height: 1.5;
+        }
+        #status strong { color: var(--strong-color); font-weight: bold; }
+        .error { color: var(--error-color) !important; }
+        .data-display {
+            margin-top: 20px; padding: 15px; background-color: var(--secondary-bg);
+            border: 1px solid var(--border-color); border-radius: 8px; max-width: 70%;
+            text-align: left; display: none;
+        }
+        .data-display h3 {
+            margin-top: 0; color: var(--accent-color); border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px; margin-bottom: 10px;
+        }
+        .data-display ul { padding-left: 20px; list-style: none; margin: 0; }
+        .data-display li { margin-bottom: 8px; line-height: 1.4; }
+        .data-display li.done { text-decoration: line-through; opacity: 0.6; }
+        .data-display input[type="checkbox"] { margin-right: 8px; cursor: pointer; }
+        a { color: var(--link-color); }
+    </style>
+</head>
+<body>
+
+    <h1>Advanced Voice Assistant</h1>
+    <button id="startButton">🎙️ Start Listening</button>
+    <div id="status">Press the button and speak.</div>
+
+    <div id="notesDisplay" class="data-display">
+        <h3>My Notes</h3>
+        <ul id="notesList"></ul>
+    </div>
+
+    <div id="todoDisplay" class="data-display">
+        <h3>To-Do List</h3>
+        <ul id="todoList"></ul>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
+        const notesDisplayDiv = document.getElementById('notesDisplay');
+        const notesListUl = document.getElementById('notesList');
+        const todoDisplayDiv = document.getElementById('todoDisplay');
+        const todoListUl = document.getElementById('todoList');
+        const bodyElement = document.body;
+
+        // --- Configuration ---
+        const ASSISTANT_NAME = "Assistant";
+        const DEFAULT_LANG = 'en-US';
+        // <<< --- API KEY INSERTED HERE --- >>>
+        const OPENWEATHERMAP_API_KEY = '441ed36fe38590a5a5c977326f921c8e';
+        const NEWS_SOURCE_URL = 'https://news.google.com/';
+        const DICTIONARY_API_URL = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
+        const WIKIPEDIA_API_URL = `https://en.wikipedia.org/w/api.php?origin=*&format=json&action=query`;
+
+        // --- State Variables ---
+        let voices = [];
+        let lastAssistantResponse = "";
+        let activeTimers = {};
+        let notificationPermission = Notification.permission;
+
+        // --- Browser API Setup ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        const synth = window.speechSynthesis;
+
+        // --- Utility Functions ---
+        function speak(message, lang = DEFAULT_LANG, onEndCallback = null) {
+            lastAssistantResponse = message;
+            if (synth.speaking) synth.cancel();
+            if (!message) return;
+            try {
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.lang = lang;
+                utterance.onend = () => { if (onEndCallback) onEndCallback(); };
+                utterance.onerror = (event) => console.error('SpeechSynthesisUtterance.onerror', event);
+                synth.speak(utterance);
+            } catch (error) { console.error("Error in speech synthesis:", error); }
+        }
+
+        function updateStatus(message, isError = false) {
+            statusDiv.innerHTML = ''; statusDiv.textContent = message;
+            statusDiv.className = isError ? 'error' : '';
+        }
+
+        function displayRecognizedText(text) {
+            statusDiv.innerHTML = `You said: <strong>"${text}"</strong>`;
+            statusDiv.className = '';
+        }
+
+        function loadVoices() {
+            voices = synth.getVoices();
+            if (voices.length === 0) {
+                 synth.onvoiceschanged = () => { voices = synth.getVoices(); console.log("Voices loaded async:", voices.length); };
+             } else { console.log("Voices available:", voices.length); }
+        }
+
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) { speak("Notifications not supported."); return; }
+            if (notificationPermission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    notificationPermission = permission;
+                    if (permission === 'granted') { speak("Notifications enabled."); showNotification("Notifications Enabled", "Alerts will show here."); }
+                    else { speak("Notifications disabled."); }
+                });
+            } else if (notificationPermission === 'denied') { speak("Notifications denied. Enable in browser settings."); }
+        }
+
+        function showNotification(title, body) {
+            if (notificationPermission !== 'granted') return;
+            try { new Notification(title, { body: body, icon: '🎙️' }); }
+            catch (err) { console.error("Notification error:", err); }
+        }
+
+        // --- Feature Functions ---
+
+        // Notes
+        function getNotes() { return JSON.parse(localStorage.getItem('voiceAssistantNotes') || '[]'); }
+        function saveNotes(notes) { localStorage.setItem('voiceAssistantNotes', JSON.stringify(notes)); }
+        function addNote(noteContent) { if (!noteContent) { speak("Note content?"); return; } const n=getNotes(); n.push(noteContent); saveNotes(n); speak(`Noted: ${noteContent}`); displayNotes(); }
+        function readNotes() { const n = getNotes(); if (n.length === 0) { speak("No notes."); notesDisplayDiv.style.display = 'none'; return;} speak("Notes:"); displayNotes(); let d=500; n.forEach((note, i) => { setTimeout(() => speak(`${i+1}. ${note}`), d); d+=1000+(note.length*50); });}
+        function displayNotes() { const n=getNotes(); notesListUl.innerHTML = ''; if(n.length > 0) { n.forEach(note => { const li=document.createElement('li'); li.textContent=note; notesListUl.appendChild(li); }); notesDisplayDiv.style.display='block'; } else { notesDisplayDiv.style.display='none'; }}
+        function clearNotes() { localStorage.removeItem('voiceAssistantNotes'); speak("Notes cleared."); notesDisplayDiv.style.display = 'none'; }
+
+        // To-Do List
+        function getTodos() { return JSON.parse(localStorage.getItem('voiceAssistantTodos') || '[]'); }
+        function saveTodos(todos) { localStorage.setItem('voiceAssistantTodos', JSON.stringify(todos)); }
+        function addTodoItem(itemText) { if (!itemText) { speak("Task content?"); return; } const t=getTodos(); t.push({ text: itemText, done: false, id: Date.now() }); saveTodos(t); speak(`Added "${itemText}" to list.`); displayTodos(); }
+        function markTodoDone(itemIdentifier) { if (!itemIdentifier) { speak("Which item to mark done?"); return; } const t=getTodos(); let found=false; const itemNum=parseInt(itemIdentifier); const u=t.map((todo, i) => { if(todo.done) return todo; if((!isNaN(itemNum) && (i+1)===itemNum) || todo.text.toLowerCase().includes(itemIdentifier.toLowerCase())) { if (!found) { speak(`Marking "${todo.text}" done.`); found=true; return { ...todo, done: true }; }} return todo; }); if (found) { saveTodos(u); displayTodos(); } else { speak(`Incomplete item "${itemIdentifier}" not found.`); }}
+        function readTodos() { const t=getTodos(); displayTodos(); const inc=t.filter(td=>!td.done); const com=t.filter(td=>td.done); if(inc.length===0 && com.length===0) { speak("To-do list empty."); } else if (inc.length===0) { speak("All tasks complete!"); } else { speak("To-do items:"); let d=500; inc.forEach((todo, i) => { setTimeout(() => speak(`${i+1}. ${todo.text}`), d); d+=1000+(todo.text.length*50); }); if(com.length>0) setTimeout(() => speak(`${com.length} completed item${com.length>1?'s':''}.`), d); }}
+        function displayTodos() { const t=getTodos(); todoListUl.innerHTML=''; if(t.length>0) { t.forEach((todo,i)=>{ const li=document.createElement('li'); li.className=todo.done?'done':''; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=todo.done; cb.id=`todo-${todo.id}`; cb.dataset.index=i; cb.addEventListener('change',(e)=>handleTodoCheckbox(e.target)); const lbl=document.createElement('label'); lbl.htmlFor=`todo-${todo.id}`; lbl.textContent=` ${i+1}. ${todo.text}`; li.appendChild(cb); li.appendChild(lbl); todoListUl.appendChild(li); }); todoDisplayDiv.style.display='block'; } else { todoDisplayDiv.style.display='none'; }}
+        function handleTodoCheckbox(checkbox) { const t=getTodos(); const i=parseInt(checkbox.dataset.index); if (t[i]) { t[i].done=checkbox.checked; saveTodos(t); displayTodos(); speak(`${checkbox.checked?'Marked':'Unmarked'} "${t[i].text}" ${checkbox.checked?'done':'not done'}.`); } }
+        function clearTodoList() { localStorage.removeItem('voiceAssistantTodos'); speak("To-do list cleared."); todoDisplayDiv.style.display = 'none'; }
+        function clearCompletedTodos() { let t=getTodos(); const inc=t.filter(td=>!td.done); if(t.length===inc.length){ speak("No completed items."); } else { saveTodos(inc); speak("Completed items removed."); displayTodos(); }}
+
+        // Timers
+        function setTimer(duration, unit) { let ms; const num=parseInt(duration); if(isNaN(num)||num<=0){ speak("Invalid duration."); return; } switch(unit.toLowerCase()){ case 'second': case 'seconds': ms=num*1000; break; case 'minute': case 'minutes': ms=num*60*1000; break; case 'hour': case 'hours': ms=num*60*60*1000; break; default: speak(`Invalid unit: ${unit}.`); return; } if (ms > 86400000) { speak("Max 24 hours."); return; } if(notificationPermission==='default') requestNotificationPermission(); const id=`timer_${Date.now()}`; const name=`${duration} ${unit}`; speak(`Timer set: ${name}.`); updateStatus(`Timer set: ${name}.`); const tid=setTimeout(()=>{ const msg=`Time's up! ${name} timer finished.`; speak(msg); updateStatus(`Timer Finished: ${name}`); showNotification("Timer Finished!", msg); delete activeTimers[id]; }, ms); activeTimers[id]={timeoutId: tid, name: name}; }
+        function clearAllTimers() { let c=0; for(const id in activeTimers){ clearTimeout(activeTimers[id].timeoutId); delete activeTimers[id]; c++; } if(c>0) { speak(`Cancelled ${c} timer${c>1?'s':''}.`); updateStatus(`Cancelled ${c} timer(s).`); } else speak("No active timers."); }
+
+        // Weather
+        async function getWeather(city) { if(!city){ speak("Which city?"); return; } const url=`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${OPENWEATHERMAP_API_KEY}&units=metric`; updateStatus(`Fetching weather ${city}...`); speak(`Getting weather for ${city}.`); try { const r=await fetch(url); if(!r.ok){ const e=await r.json().catch(()=>null); const m=e?.message||`HTTP ${r.status}`; if(r.status===404)throw new Error(`City not found: ${city}.`); if(r.status===401)throw new Error('Invalid weather API key.'); throw new Error(m); } const d=await r.json(); const desc=d.weather[0].description; const temp=Math.round(d.main.temp); const feels=Math.round(d.main.feels_like); const hum=d.main.humidity; const wind=d.wind?.speed?Math.round(d.wind.speed*3.6):null; let rep=`In ${d.name}: ${desc}. Temp: ${temp}°C (feels like ${feels}°C). Humidity: ${hum}%.`; if(wind!==null)rep+=` Wind: ${wind} km/h.`; speak(rep); updateStatus(`Weather ${d.name}: ${temp}°C, ${desc}.`); } catch (error) { console.error("Weather error:",error); speak(`Weather failed. ${error.message}`); updateStatus(`Weather failed: ${error.message}`, true); }}
+
+        // Calculations
+        function calculate(expr) { try { let cl=expr.replace(/calculate|what is|what's|compute/gi,'').replace(/plus/gi,'+').replace(/minus|subtract|less/gi,'-').replace(/times|multiplied by/gi,'*').replace(/divided by|over/gi,'/').replace(/power|raised to|to the power of/gi,'**').replace(/percent of/gi,'/100*').replace(/percent/gi,'/100').replace(/\s+/g,'').replace(/[^0-9.+\-*/%()^]/g,''); if(!cl){ speak("Expression?"); return; } if(/[\+\-*/%^]{2,}|^[+\-*/%^]|[+\-*/%^]$/.test(cl)){ speak("Invalid format."); return; } const res=new Function(`'use strict'; return (${cl})`)(); if(typeof res!=='number'||!isFinite(res)){ speak("Invalid result."); } else { const fmt=parseFloat(res.toFixed(4)); speak(`${expr} = ${fmt}`); updateStatus(`Calc: ${cl} = ${fmt}`); } } catch(error){ console.error("Calc error:",error); speak("Calc error."); updateStatus("Calculation failed.", true); }}
+
+        // Random Facts
+        const randomFacts = ["Honey never spoils.", "Flamingo group: flamboyance.", "Unicorn: Scotland's animal.", "Bananas are berries.", "Octopus: 3 hearts.", "More trees than stars.", "Venus day > Venus year.", "Eiffel Tower taller in summer.", "Shrimp heart in head.", "Slugs: 4 noses."];
+        function tellRandomFact() { speak(randomFacts[Math.floor(Math.random() * randomFacts.length)]); }
+
+        // Personalization
+        function saveName(name) { if(!name||name.length<2){ speak("Valid name?"); return; } const cl=name.trim(); localStorage.setItem('userName',cl); speak(`Okay ${cl}, remembered.`); }
+        function recallName() { const n=localStorage.getItem('userName'); if(n)speak(`Name is ${n}.`); else speak("Don't know name. Say 'My name is...'"); }
+        function forgetName() { const n=localStorage.getItem('userName'); if(n){localStorage.removeItem('userName'); speak(`Forgotten ${n}.`);} else speak("No name stored."); }
+
+        // Dictionary
+        async function getDefinition(word) { if(!word){ speak("Define what?"); return; } updateStatus(`Defining "${word}"...`); speak(`Looking up ${word}.`); try { const r=await fetch(`${DICTIONARY_API_URL}${encodeURIComponent(word)}`); if(!r.ok){ if(r.status===404)throw new Error(`No definition for "${word}".`); throw new Error(`Dict API error: ${r.status}`); } const d=await r.json(); const m=d[0]?.meanings[0]; const def=m?.definitions[0]?.definition; const pos=m?.partOfSpeech; if(def){ speak(`${word} (${pos}): ${def}`); updateStatus(`Defined "${word}".`); } else throw new Error(`No definition found for "${word}".`); } catch(error){ console.error("Dict error:",error); speak(`Definition failed. ${error.message}`); updateStatus(`Definition failed: ${error.message}`, true); }}
+
+        // Wikipedia
+        async function getWikipediaSummary(topic) { if(!topic){ speak("Look up what?"); return; } updateStatus(`Wiki search "${topic}"...`); speak(`Looking up ${topic} on Wikipedia.`); try { const sUrl=`${WIKIPEDIA_API_URL}&list=search&srsearch=${encodeURIComponent(topic)}&srlimit=1`; const sr=await fetch(sUrl); if(!sr.ok)throw new Error(`Wiki search API error: ${sr.status}`); const sd=await sr.json(); if(!sd.query?.search?.length)throw new Error(`No Wiki page for "${topic}".`); const title=sd.query.search[0].title; updateStatus(`Found "${title}". Fetching summary...`); const eUrl=`${WIKIPEDIA_API_URL}&prop=extracts&exintro=true&explaintext=true&titles=${encodeURIComponent(title)}`; const er=await fetch(eUrl); if(!er.ok)throw new Error(`Wiki extract API error: ${er.status}`); const ed=await er.json(); const pages=ed.query?.pages; const pageId=Object.keys(pages||{})[0]; const ext=pages?.[pageId]?.extract; if(ext){ const sum=ext.length>500?ext.substring(0,500)+'...':ext; speak(`Summary for ${title}: ${sum}`); updateStatus(`Summary found for "${title}".`); } else throw new Error(`No summary for "${title}".`); } catch(error){ console.error("Wiki error:",error); speak(`Wiki failed. ${error.message}`); updateStatus(`Wiki failed: ${error.message}`, true); }}
+
+        // Clipboard
+        async function copyLastResponse() { if(!lastAssistantResponse){ speak("Nothing said yet."); return; } if(!navigator.clipboard){ speak("Clipboard copy not supported."); return; } try { await navigator.clipboard.writeText(lastAssistantResponse); speak("Copied last response."); updateStatus("Copied response."); } catch(err){ console.error('Clipboard fail:',err); speak("Copy failed."); updateStatus("Copy failed.", true); }}
+
+        // Random Generators
+        function flipCoin() { const r=Math.random()<0.5?'Heads':'Tails'; speak(`Coin: ${r}.`); updateStatus(`Coin: ${r}`); }
+        function rollDice(sides=6) { const s=parseInt(sides); if(isNaN(s)||s<=1){ speak("Invalid sides."); return; } const r=Math.floor(Math.random()*s)+1; speak(`Rolled D${s}: ${r}.`); updateStatus(`Rolled D${s}: ${r}`); }
+        function getRandomNumber(minS='1',maxS='100') { const min=parseInt(minS); const max=parseInt(maxS); if(isNaN(min)||isNaN(max)||min>=max){ speak("Invalid range."); return; } const r=Math.floor(Math.random()*(max-min+1))+min; speak(`Random ${min}-${max}: ${r}.`); updateStatus(`Random (${min}-${max}): ${r}`); }
+
+        // Theme
+        function toggleTheme() { bodyElement.classList.toggle('light-theme'); const t=bodyElement.classList.contains('light-theme')?'light':'dark'; speak(`Theme: ${t}.`); updateStatus(`Theme: ${t}.`); localStorage.setItem('assistantTheme', t); }
+        function loadTheme() { const t=localStorage.getItem('assistantTheme'); if(t==='light')bodyElement.classList.add('light-theme'); else bodyElement.classList.remove('light-theme'); }
+
+        // Page Search
+        function findOnPage(text) { if(!text){ speak("Find what?"); return; } if(!window.find){ speak("Page search not supported."); return; } const f=window.find(text,false,false,true,false,true,false); if(f){ speak(`Found "${text}".`); updateStatus(`Found: "${text}"`); } else { speak(`"${text}" not found.`); updateStatus(`Not found: "${text}"`); if(window.getSelection)window.getSelection().removeAllRanges(); }}
+
+
+        // --- Command Definitions ---
+        const commands = [
+            { triggers: ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening'], action: () => { const name = localStorage.getItem('userName'); const greetings = ["Hello", "Hi", "Hey there", "Greetings"]; speak(`${greetings[Math.floor(Math.random()*greetings.length)]}${name ? ' '+name : ''}! How can I help?`) } },
+            { triggers: ['how are you', 'how are you doing'], action: () => speak('Functioning optimally! Ready for your next command.') },
+            { triggers: ['your name', 'who are you'], action: () => speak(`I am your web-based ${ASSISTANT_NAME}.`) },
+            { triggers: ['time', "what's the time"], action: () => speak(`It's ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`) },
+            { triggers: ['date', "what's today's date"], action: () => speak(`Today is ${new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`) },
+            { triggers: ['joke', 'tell me a joke'], action: () => speak('Why did the scarecrow win an award? Because he was outstanding in his field!') },
+            { triggers: ['fact', 'tell me something interesting', 'random fact'], action: tellRandomFact },
+            { triggers: ['thank you', "thanks"], action: () => speak("You're welcome!") },
+            { triggers: ['goodbye', 'bye', 'see you'], action: () => speak("Goodbye! Have a great day!") },
+            { triggers: ['open google'], action: () => { speak('Opening Google.'); window.open('https://www.google.com', '_blank'); } },
+            { triggers: ['open youtube'], action: () => { speak('Opening YouTube.'); window.open('https://www.youtube.com', '_blank'); } },
+            { triggers: ['open news', 'latest news'], action: () => { speak('Opening Google News.'); window.open(NEWS_SOURCE_URL, '_blank'); } },
+            { match: text => text.match(/search for (.+)/i), action: (m) => { const q = m[1]?.trim(); if (q) { speak(`Searching Google for ${q}`); window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank'); } else speak('Search what?'); } },
+            { match: text => text.match(/google (.+)/i), action: (m) => { const q = m[1]?.trim(); if (q) { speak(`Googling ${q}`); window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank'); } else speak('Google what?'); } },
+            { triggers: ['scroll down', 'page down'], action: () => { speak('Scrolling down.'); window.scrollBy(0, window.innerHeight * 0.8); } },
+            { triggers: ['scroll up', 'page up'], action: () => { speak('Scrolling up.'); window.scrollBy(0, -window.innerHeight * 0.8); } },
+            { triggers: ['go back', 'previous page'], action: () => { speak('Going back.'); window.history.back(); } },
+            { triggers: ['go forward', 'next page'], action: () => { speak('Going forward.'); window.history.forward(); } },
+            { triggers: ['reload page', 'refresh page'], action: () => { speak('Reloading.'); window.location.reload(); } },
+            { triggers: ['full screen', 'enter fullscreen'], action: () => { if (document.documentElement.requestFullscreen) { speak('Fullscreen.'); document.documentElement.requestFullscreen(); } else speak("Can't fullscreen."); } },
+            { triggers: ['exit fullscreen', 'minimize'], action: () => { if (document.exitFullscreen && document.fullscreenElement) { speak('Exiting fullscreen.'); document.exitFullscreen(); } else speak("Not fullscreen."); } },
+            { match: text => text.match(/find on page (.+)/i), action: (m) => findOnPage(m[1]?.trim()) },
+            { match: text => text.match(/search this page for (.+)/i), action: (m) => findOnPage(m[1]?.trim()) },
+            { match: text => text.match(/(?:weather in|what's the weather in|weather for) (.+)/i), action: (m) => getWeather(m[1]?.trim()) },
+            { match: text => text.match(/(?:calculate|what is|what's|compute) (.+)/i), action: (m) => calculate(m[1]) },
+            { match: text => text.match(/set(?: a)? timer for (\d+) (second|seconds|minute|minutes|hour|hours)/i), action: (m) => setTimer(m[1], m[2]) },
+            { triggers: ['cancel timer', 'stop timer', 'clear timers', 'cancel all timers'], action: clearAllTimers },
+            { triggers: ['show notifications', 'enable notifications'], action: requestNotificationPermission },
+            { match: text => text.match(/(?:add note|take a note|remember that|note down) (.+)/i), action: (m) => addNote(m[1]?.trim()) },
+            { triggers: ['read my notes', 'show notes', 'what are my notes'], action: readNotes },
+            { triggers: ['clear my notes', 'delete all notes', 'forget notes'], action: clearNotes },
+            { match: text => text.match(/(?:add to do|add task|add to my list) (.+)/i), action: (m) => addTodoItem(m[1]?.trim()) },
+            { triggers: ['read my to do list', 'show my tasks', "what's on my list"], action: readTodos },
+            { match: text => text.match(/(?:mark(?: item)?|check off|complete) (.+?) (?:as )?done/i), action: (m) => markTodoDone(m[1]?.trim()) },
+            { triggers: ['clear to do list', 'clear all tasks'], action: clearTodoList },
+            { triggers: ['clear completed tasks', 'remove done items'], action: clearCompletedTodos },
+            { match: text => text.match(/my name is (.+)/i), action: (m) => saveName(m[1]?.trim()) },
+            { triggers: ["what's my name", 'do you know my name', 'say my name'], action: recallName },
+            { triggers: ["forget my name"], action: forgetName },
+            { match: text => text.match(/(?:define|what is the meaning of|what does) (.+)/i), action: (m) => getDefinition(m[1]?.trim()) },
+            { match: text => text.match(/(?:wikipedia|look up|tell me about|what is|who is) (.+)/i), action: (m) => getWikipediaSummary(m[1]?.trim()) },
+            { triggers: ['copy that', 'copy last response', 'copy what you said'], action: copyLastResponse },
+            { triggers: ['flip a coin', 'coin flip'], action: flipCoin },
+            { match: text => text.match(/roll a D(\d+)/i), action: (m) => rollDice(m[1]) },
+            { triggers: ['roll a die', 'roll the dice'], action: () => rollDice(6) },
+            { match: text => text.match(/random number between (\d+) and (\d+)/i), action: (m) => getRandomNumber(m[1], m[2]) },
+            { triggers: ['random number', 'pick a number'], action: () => getRandomNumber() },
+            { triggers: ['change theme', 'toggle theme', 'switch to light mode', 'switch to dark mode'], action: toggleTheme },
+            { match: text => text.match(/convert (\d*\.?\d+) (.+?) to (.+)/i), action: (m) => { const [, amt, from, to] = m; speak(`Opening Google: convert ${amt} ${from} to ${to}.`); window.open(`https://www.google.com/search?q=${encodeURIComponent(`${amt} ${from} to ${to}`)}`, '_blank'); } },
+            { triggers: ['list voices', 'available voices'], action: () => { if (!voices||!voices.length){ speak("Voices loading..."); loadVoices(); return; } speak(`Have ${voices.length} voices. Some:`); const l=voices.slice(0,5).map(v=>`${v.name.split('(')[0].trim()} (${v.lang})`).join(', '); speak(l); console.log("Voices:", voices.map(v=>`${v.name} (${v.lang})`)); updateStatus(`Listed ${voices.length} voices.`); } },
+        ];
+
+        // --- Command Handling Logic ---
+        function handleCommand(commandText) {
+            const text = commandText.toLowerCase().trim();
+            console.log('Command:', text);
+            if (!text) { updateStatus("Didn't catch that.", true); return; }
+            displayRecognizedText(commandText);
+
+            let executed = false;
+            for (const cmd of commands) {
+                let match = false; let args = [];
+                if (cmd.triggers) { match = cmd.triggers.some(t => text.includes(t)); }
+                else if (cmd.match) { const res = cmd.match(text); if (res) { match = true; args = res; } }
+
+                if (match) {
+                    try {
+                        const result = cmd.action(args);
+                         if (result instanceof Promise) result.catch(e => { console.error("Async error:", e); speak("Command error."); updateStatus(`Error: ${e.message}`, true); });
+                    } catch (e) { console.error("Action error:", e); speak("Processing error."); updateStatus(`Error: ${e.message}`, true); }
+                    executed = true; break;
+                }
+            }
+            if (!executed) { speak("Command not understood."); statusDiv.innerHTML += "<br/><span style='color:var(--status-color);'>(Unknown)</span>"; }
+        }
+
+        // --- Speech Recognition Setup ---
+        if (recognition) {
+            recognition.lang = DEFAULT_LANG; recognition.interimResults = false; recognition.continuous = false;
+            recognition.onresult = (e) => { handleCommand(e.results[e.results.length-1][0].transcript); };
+            recognition.onstart = () => { updateStatus('Listening...'); startButton.textContent="👂 Listening..."; startButton.disabled=true; };
+            recognition.onend = () => { if(!synth.speaking)updateStatus('Click button.'); startButton.textContent="🎙️ Start Listening"; startButton.disabled=false; };
+            recognition.onerror = (e) => { let m='Speech error'; if(e.error==='no-speech')m='No speech.'; else if(e.error==='audio-capture')m='Mic error.'; else if(e.error==='not-allowed'){m='Mic permission denied.'; requestNotificationPermission();} else m=`Error: ${e.error}`; console.error('SR Error:',e.error,e.message); updateStatus(m,true); if(e.error!=='no-speech')speak('Recognition failed.'); startButton.textContent="🎙️ Start Listening"; startButton.disabled=false; };
+            startButton.addEventListener('click', () => { if(!recognition||startButton.disabled)return; if(synth.speaking)synth.cancel(); try{if(voices.length===0)loadVoices(); recognition.start();} catch(e){console.error("Start err:",e); updateStatus("Start failed.",true); startButton.disabled=false;} });
+            loadVoices(); loadTheme(); displayNotes(); displayTodos(); requestNotificationPermission(); // Initial loads & checks
+        } else {
+            updateStatus("Web Speech API not supported.", true); speak("Voice recognition not supported.");
+            startButton.disabled=true; startButton.textContent="⛔ Not Supported";
+        }
+    </script>
+
+</body>
+</html>
