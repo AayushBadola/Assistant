@@ -49,17 +49,7 @@ This assistant boasts a wide array of capabilities:
 
 ---
 
-## 🎬 Demo (Placeholder)
 
-*(It's highly recommended to add a GIF demonstrating the assistant in action here!)*
-
-```markdown
-![Demo GIF](link_to_your_demo_gif.gif)
-```
-
-*(Replace `link_to_your_demo_gif.gif` with the actual URL or relative path to your demo GIF after creating one using tools like ScreenToGif, Giphy Capture, etc.)*
-
----
 
 ## 🚀 Getting Started
 
@@ -74,7 +64,7 @@ There are two main ways to get the code:
     ```bash
     git clone https://github.com/AayushBadola/Assistant.git
     ```
-    *(Note: Replace the URL if your repository name/location is different)*
+
 5.  Navigate into the newly created directory:
     ```bash
     cd Assistant
@@ -82,7 +72,7 @@ There are two main ways to get the code:
 
 **Option 2: Downloading the ZIP File**
 
-1.  Go to the GitHub repository page: [https://github.com/AayushBadola/Assistant](https://github.com/AayushBadola/Assistant) *(Adjust URL if needed)*
+1.  Go to the GitHub repository page: [https://github.com/AayushBadola/Assistant](https://github.com/AayushBadola/Assistant) 
 2.  Click the green `<> Code` button.
 3.  Select `Download ZIP`.
 4.  Extract the contents of the downloaded ZIP file to a location on your computer.
