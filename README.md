@@ -1,6 +1,4 @@
-Okay, I've updated the `README.md` to remove the explicit API key and add instructions for cloning or downloading the repository.
 
-```markdown
 # 🚀 Advanced Browser-Based Voice Assistant 🎙️
 
 [![Language: HTML5](https://img.shields.io/badge/Language-HTML5-E34F26?style=for-the-badge&logo=html5)](https://developer.mozilla.org/en-US/docs/Web/Guide/HTML/HTML5)
@@ -262,11 +260,4 @@ Distributed under the MIT License. See `LICENSE` file for more information (or r
   &nbsp;&nbsp;&nbsp;&nbsp;
   <img src="https://img.shields.io/badge/Powered%20by-☕-brown?style=flat-square" alt="Powered by Coffee"/>
 </p>
-```
 
-**Key Changes:**
-
-1.  **Configuration Section:** Removed the code block showing the API key. It now explicitly tells the user *where* to find the placeholder in the HTML file and instructs them to replace it with their own key.
-2.  **Getting Started Section:** Added this new section with clear instructions for both `git clone` and downloading the ZIP file.
-3.  **How to Run Section:** Updated slightly to reflect that the user first needs to get the code using one of the methods from "Getting Started".
-4.  **Troubleshooting Section:** Added a point specifically reminding the user to check if they inserted their API key correctly.
